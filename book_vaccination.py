@@ -3,6 +3,7 @@ import signal
 from contextlib import contextmanager
 from datetime import datetime
 import json
+import tabulate
 import time
 import os
 import sys
@@ -18,13 +19,6 @@ CAPTCHA_URL = "https://cdn-api.co-vin.in/api/v2/auth/getRecaptcha"
 
 DISTRICT = 'district_id'
 DATE = 'date'
-BENEFICIARY = ''
-DISTRICT_ID = '188'
-# Looking slots in Gurgaon
-VACCINE_PREFERENCE = ['COVAXIN']
-# VACCINE_PREFERENCE = ['COVAXIN', 'COVISHIELD']
-
-QUERY_PARAMS = {DISTRICT: DISTRICT_ID, DATE: datetime.now().date().strftime("%d-%m-%Y")}
 
 BROWSER_HEADERS = [{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'},
                    {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'}]
@@ -50,13 +44,13 @@ def raise_timeout(signum, frame):
     raise TimeoutError
 
 
-def find_sessions(headers):
-    url = get_url_with_query_params()
+def find_sessions(headers, district_id, vaccine_preference, beneficiary, center_preference):
+    url = get_url_with_query_params(district_id)
     response = None
     booked = False
     try:
         with timeout(10):
-            response = requests.get(url, headers=BROWSER_HEADERS[1])
+            response = requests.get(url, headers=BROWSER_HEADERS[0])
     except Exception as e:
         print('Not getting correct response from api in specified time', e)
 
@@ -68,20 +62,16 @@ def find_sessions(headers):
                 if session['min_age_limit'] == 18 and session['available_capacity'] > 0 and session['available_capacity_dose1'] > 0:
                     print('******', center['name'], session['date'], session['vaccine'], session['available_capacity'], session['available_capacity_dose1'])
                     found = True
-        if found:
-            os.system('echo -e "\a"')
-        for center in centers:
-            for session in center['sessions']:
-                if session['min_age_limit'] == 18 and session['available_capacity'] > 0 and session['available_capacity_dose1'] > 0 and session['vaccine'] in VACCINE_PREFERENCE:
-                    data = {"center_id": center['center_id'], "session_id": session['session_id'],
-                            "beneficiaries":[BENEFICIARY], "slot": session['slots'][1],
-                            "captcha": "nMReQ", "dose": 1}
-                    data['captcha'] = generate_captcha(headers)
-                    book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
-                    booked = True if book_response.status_code in [200, 201] else False
-                    print(book_response.status_code)
-                    print(book_response.text)
-                    found = True
+                    os.system('echo -e "\a"')
+                    if (not vaccine_preference or session['vaccine'] == vaccine_preference) and (not center_preference or center_preference.lower() in center['name'].lower()):
+                        data = {'center_id': center['center_id'], 'session_id': session['session_id'],
+                                'beneficiaries': [beneficiary], 'slot': session['slots'][1], 'captcha': 'nMReQ',
+                                'dose': 1}
+                        data['captcha'] = generate_captcha(headers)
+                        book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
+                        booked = True if book_response.status_code in [200, 201] else False
+                        print(book_response.status_code)
+                        print(book_response.text)
         print('******No slot available in centers: ', len(centers)) if not found else None
     return not booked
 
@@ -115,10 +105,11 @@ def generate_captcha(request_header):
         return captcha_builder(resp.json())
 
 
-def get_url_with_query_params():
+def get_url_with_query_params(district_id):
+    params = {DISTRICT: district_id, DATE: datetime.now().date().strftime("%d-%m-%Y")}
     query_params_url = ''
-    for param in QUERY_PARAMS:
-        query_params_url = query_params_url + param + '=' + QUERY_PARAMS[param] + '&'
+    for param in params:
+        query_params_url = query_params_url + param + '=' + params[param] + '&'
     if query_params_url:
         query_params_url = '?' + query_params_url[:-1]
     url = API + query_params_url
@@ -130,7 +121,7 @@ def generate_token_otp():
     This function generate OTP and returns a new token
     """
     mobile = input("Enter the registered mobile number: ")
-    headers = BROWSER_HEADERS[1]
+    headers = BROWSER_HEADERS[0]
 
     valid_token = False
     while not valid_token:
@@ -185,30 +176,170 @@ def generate_token_otp():
             print(str(e))
 
 
-def main():
-    if BENEFICIARY and DISTRICT_ID:
-        generate_token = input("Generate New Token?, Press n if you ran the script in last 10 min (y/n Default y): ")
-        generate_token = generate_token if generate_token else 'y'
-        if generate_token == 'y':
-            token = generate_token_otp()
-            os.system("sed -i -s 's/existing_token = [\"*]/existing_token = \"{new_token}/g' {file}".format(
-                new_token=token, file='./book_vaccination.py'
-            ))
-            os.system('rm ./book_vaccination.py-s')
-        else:
-            existing_token = ""
-            token = existing_token
-        if token:
-            keep_looking = True
-            headers = BROWSER_HEADERS[1]
-            headers['Authorization'] = 'Bearer ' + token
-            while keep_looking:
-                keep_looking = find_sessions(headers)
-                time.sleep(0.5)
-        else:
-            print("Please generate Token")
+def get_vaccine_preference():
+    print("It seems you're trying to find a slot for your first dose. Do you have a vaccine preference?")
+    preference = input("Enter 0 for No Preference, 1 for COVISHIELD, 2 for COVAXIN, Default 0 : ")
+    preference = int(preference) if preference and int(preference) in [0, 1, 2] else 0
+
+    if preference == 1:
+        return 'COVISHIELD'
+    elif preference == 2:
+        return 'COVAXIN'
     else:
-        print("Enter beneficiary ID and district ID")
+        return None
+
+
+def display_table(dict_list):
+    header = ['idx'] + list(dict_list[0].keys())
+    rows = [[idx + 1] + list(x.values()) for idx, x in enumerate(dict_list)]
+    print(tabulate.tabulate(rows, header, tablefmt='grid'))
+
+
+def get_districts(header):
+    states = requests.get('https://cdn-api.co-vin.in/api/v2/admin/location/states', headers=header)
+
+    if states.status_code == 200:
+        states = states.json()['states']
+
+        refined_states = []
+        for state in states:
+            tmp = {'state': state['state_name']}
+            refined_states.append(tmp)
+
+        display_table(refined_states)
+        state = int(input('\nEnter State index: '))
+        state_id = states[state - 1]['state_id']
+        district_url = 'https://cdn-api.co-vin.in/api/v2/admin/location/districts/' + str(state_id)
+
+        districts = requests.get(district_url, headers=header)
+
+        if districts.status_code == 200:
+            districts = districts.json()['districts']
+
+            refined_districts = []
+            for district in districts:
+                tmp = {'district': district['district_name']}
+                refined_districts.append(tmp)
+
+            display_table(refined_districts)
+            reqd_districts = input('\nEnter index number of district to monitor : ')
+            districts_idx = [int(idx) - 1 for idx in reqd_districts.split(',')]
+            reqd_districts = [{
+                'district_id': item['district_id'],
+                'district_name': item['district_name'],
+                'alert_freq': 440 + ((2 * idx) * 110)
+            } for idx, item in enumerate(districts) if idx in districts_idx]
+
+            print(f'Selected districts: ')
+            display_table(reqd_districts)
+            return reqd_districts
+
+        else:
+            print('Unable to fetch districts')
+            print(districts.status_code)
+            print(districts.text)
+            os.system("pause")
+            sys.exit(1)
+
+    else:
+        print('Unable to fetch states')
+        print(states.status_code)
+        print(states.text)
+        os.system("pause")
+        sys.exit(1)
+
+
+def get_beneficiaries(request_header):
+    beneficiaries = requests.get("https://cdn-api.co-vin.in/api/v2/appointment/beneficiaries", headers=request_header)
+
+    if beneficiaries.status_code == 200:
+        beneficiaries = beneficiaries.json()['beneficiaries']
+
+        refined_beneficiaries = []
+        for beneficiary in beneficiaries:
+            beneficiary['age'] = datetime.today().year - int(beneficiary['birth_year'])
+
+            tmp = {
+                'bref_id': beneficiary['beneficiary_reference_id'],
+                'name': beneficiary['name'],
+                'vaccine': beneficiary['vaccine'],
+                'age': beneficiary['age'],
+                'status': beneficiary['vaccination_status']
+            }
+            refined_beneficiaries.append(tmp)
+
+        display_table(refined_beneficiaries)
+        reqd_beneficiaries = input('Enter index number of beneficiary to book for : ')
+        beneficiary_idx = [int(idx) - 1 for idx in reqd_beneficiaries.split(',')]
+        reqd_beneficiaries = [{
+            'bref_id': item['beneficiary_reference_id'],
+            'name': item['name'],
+            'vaccine': item['vaccine'],
+            'age': item['age'],
+            'status': item['vaccination_status']
+        } for idx, item in enumerate(beneficiaries) if idx in beneficiary_idx]
+
+        print(f'Selected beneficiaries: ')
+        display_table(reqd_beneficiaries)
+        return reqd_beneficiaries
+
+    else:
+        print('Unable to fetch beneficiaries')
+        print(beneficiaries.status_code)
+        print(beneficiaries.text)
+        os.system("pause")
+        return []
+
+
+def get_center_preference():
+    preference = input("\nDo you have a hospital preference? (y/n Default n): ")
+    if preference == 'y':
+        preference = input("Enter unique hospital name like max, fortis etc. (Don't worry about exact name): ")
+        return preference
+    else:
+        return None
+
+
+def main():
+    headers = BROWSER_HEADERS[0]
+    vaccine_preference = get_vaccine_preference()
+    center_preference = get_center_preference()
+
+    generate_token = input("Generate New Token?, Press n if you ran the script in last 10 min (y/n Default y): ")
+    generate_token = generate_token if generate_token else 'y'
+    if generate_token == 'y':
+        token = generate_token_otp()
+        os.system("sed -i -s 's/existing_token = [\"*]/existing_token = \"{new_token}/g' {file}".format(
+            new_token=token, file='./book_vaccination.py'
+        ))
+        os.system('rm ./book_vaccination.py-s')
+    else:
+        existing_token = ""
+        token = existing_token
+    if token:
+        keep_looking = True
+        headers['Authorization'] = 'Bearer ' + token
+        district_id = get_districts(headers)
+        district_id = str(district_id[0]['district_id']) if district_id else None
+        beneficiary = get_beneficiaries(headers)
+        beneficiary = str(beneficiary[0]['bref_id']) if beneficiary else None
+        if beneficiary and district_id:
+            count = 0
+            _start = datetime.now()
+            while keep_looking:
+                keep_looking = find_sessions(headers, district_id, vaccine_preference, beneficiary, center_preference)
+                count = count + 1
+                time.sleep(1)
+                if count > 90:
+                    _now = datetime.now()
+                    _should_wait_for_more = 300 - (_now - _start).seconds
+                    time.sleep(_should_wait_for_more) if _should_wait_for_more > 0 else None
+                    _start = datetime.now()
+                    count = 0
+        else:
+            print("Error: Invalid Beneficiary/District")
+    else:
+        print("Please generate Token")
 
 
 if __name__ == '__main__':
