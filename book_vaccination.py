@@ -51,7 +51,7 @@ def find_sessions(headers, district_id, vaccine_preference, beneficiary_ids, cen
     doses = len(beneficiary_ids)
     try:
         with timeout(10):
-            response = requests.get(url, headers=BROWSER_HEADERS[0])
+            response = requests.get(url, headers=headers)
     except Exception as e:
         print('Not getting correct response from api in specified time', e)
 
@@ -330,6 +330,7 @@ def main():
     else:
         existing_token = ""
         token = existing_token
+    token_generated_at = datetime.now()
     if token:
         keep_looking = True
         headers['Authorization'] = 'Bearer ' + token
@@ -351,9 +352,13 @@ def main():
                 if count > 90:
                     _now = datetime.now()
                     _should_wait_for_more = 300 - (_now - _start).seconds
-                    time.sleep(_should_wait_for_more) if _should_wait_for_more > 0 else None
+                    if _should_wait_for_more > 0:
+                        print("To avoid blocking by server, Waiting for seconds: ", _should_wait_for_more)
+                        time.sleep(_should_wait_for_more)
                     _start = datetime.now()
                     count = 0
+                if (datetime.now() - token_generated_at).seconds > 600:
+                    print("\n******Rerun your script as token might be expired as it is more than 10 min old*******\n")
         else:
             print("Error: Invalid Beneficiary/District")
     else:

@@ -15,7 +15,7 @@ Install virtualenv (pip/pip3 install virtualenv)
 
 inside this directory, run following commands:
 
-virtualenv venv -p python3.6.5
+virtualenv venv -p python3
 
 source venv/bin/activate
 
