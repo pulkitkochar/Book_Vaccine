@@ -44,10 +44,11 @@ def raise_timeout(signum, frame):
     raise TimeoutError
 
 
-def find_sessions(headers, district_id, vaccine_preference, beneficiary, center_preference):
+def find_sessions(headers, district_id, vaccine_preference, beneficiary_ids, center_preference, captcha):
     url = get_url_with_query_params(district_id)
     response = None
     booked = False
+    doses = len(beneficiary_ids)
     try:
         with timeout(10):
             response = requests.get(url, headers=BROWSER_HEADERS[0])
@@ -59,15 +60,15 @@ def find_sessions(headers, district_id, vaccine_preference, beneficiary, center_
         found = False
         for center in centers:
             for session in center['sessions']:
-                if session['min_age_limit'] == 18 and session['available_capacity'] > 0 and session['available_capacity_dose1'] > 0:
+                if session['min_age_limit'] == 18 and session['available_capacity'] >= doses and session['available_capacity_dose1'] >= doses:
                     print('******', center['name'], session['date'], session['vaccine'], session['available_capacity'], session['available_capacity_dose1'])
                     found = True
                     os.system('echo -e "\a"')
                     if (not vaccine_preference or session['vaccine'] == vaccine_preference) and (not center_preference or center_preference.lower() in center['name'].lower()):
                         data = {'center_id': center['center_id'], 'session_id': session['session_id'],
-                                'beneficiaries': [beneficiary], 'slot': session['slots'][1], 'captcha': 'nMReQ',
+                                'beneficiaries': beneficiary_ids, 'slot': session['slots'][1], 'captcha': 'nMReQ',
                                 'dose': 1}
-                        data['captcha'] = generate_captcha(headers)
+                        data['captcha'] = captcha
                         book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
                         booked = True if book_response.status_code in [200, 201] else False
                         print(book_response.status_code)
@@ -269,7 +270,20 @@ def get_beneficiaries(request_header):
             refined_beneficiaries.append(tmp)
 
         display_table(refined_beneficiaries)
-        reqd_beneficiaries = input('Enter index number of beneficiary to book for : ')
+
+        print("""
+        ################# IMPORTANT NOTES #################
+        # 1. While selecting beneficiaries, make sure that selected beneficiaries are all taking the same dose: either first OR second.
+        #    Please do no try to club together booking for first dose for one beneficiary and second dose for another beneficiary.
+        #
+        # 2. While selecting beneficiaries, also make sure that beneficiaries selected for second dose are all taking the same vaccine: COVISHIELD OR COVAXIN.
+        #    Please do no try to club together booking for beneficiary taking COVISHIELD with beneficiary taking COVAXIN.
+        #
+        # 3. If you're selecting multiple beneficiaries, make sure all are of the same age group (45+ or 18+) as defined by the govt.
+        #    Please do not try to club together booking for younger and older beneficiaries.
+        ###################################################
+        """)
+        reqd_beneficiaries = input('Enter comma separated index numbers of beneficiaries to book for : ')
         beneficiary_idx = [int(idx) - 1 for idx in reqd_beneficiaries.split(',')]
         reqd_beneficiaries = [{
             'bref_id': item['beneficiary_reference_id'],
@@ -302,8 +316,8 @@ def get_center_preference():
 
 def main():
     headers = BROWSER_HEADERS[0]
-    vaccine_preference = get_vaccine_preference()
-    center_preference = get_center_preference()
+    vaccines = get_vaccine_preference()
+    centers = get_center_preference()
 
     generate_token = input("Generate New Token?, Press n if you ran the script in last 10 min (y/n Default y): ")
     generate_token = generate_token if generate_token else 'y'
@@ -321,13 +335,17 @@ def main():
         headers['Authorization'] = 'Bearer ' + token
         district_id = get_districts(headers)
         district_id = str(district_id[0]['district_id']) if district_id else None
-        beneficiary = get_beneficiaries(headers)
-        beneficiary = str(beneficiary[0]['bref_id']) if beneficiary else None
-        if beneficiary and district_id:
+        beneficiaries = get_beneficiaries(headers)
+        beneficiary_ids = []
+        if beneficiaries:
+            for beneficiary in beneficiaries:
+                beneficiary_ids.append(beneficiary['bref_id'])
+        if beneficiary_ids and district_id:
             count = 0
             _start = datetime.now()
+            captcha = generate_captcha(headers)
             while keep_looking:
-                keep_looking = find_sessions(headers, district_id, vaccine_preference, beneficiary, center_preference)
+                keep_looking = find_sessions(headers, district_id, vaccines, beneficiary_ids, centers, captcha)
                 count = count + 1
                 time.sleep(1)
                 if count > 90:
