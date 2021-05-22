@@ -66,7 +66,7 @@ def find_sessions(headers, district_id, vaccine_preference, beneficiary_ids, cen
                     os.system('echo -e "\a"')
                     if (not vaccine_preference or session['vaccine'] == vaccine_preference) and (not center_preference or center_preference.lower() in center['name'].lower()):
                         data = {'center_id': center['center_id'], 'session_id': session['session_id'],
-                                'beneficiaries': beneficiary_ids, 'slot': session['slots'][1], 'captcha': 'nMReQ',
+                                'beneficiaries': beneficiary_ids, 'slot': session['slots'][-1], 'captcha': 'nMReQ',
                                 'dose': 1}
                         data['captcha'] = captcha
                         book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
