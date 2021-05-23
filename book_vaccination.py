@@ -239,14 +239,12 @@ def get_districts(header):
             print('Unable to fetch districts')
             print(districts.status_code)
             print(districts.text)
-            os.system("pause")
             sys.exit(1)
 
     else:
         print('Unable to fetch states')
         print(states.status_code)
         print(states.text)
-        os.system("pause")
         sys.exit(1)
 
 
@@ -301,7 +299,6 @@ def get_beneficiaries(request_header):
         print('Unable to fetch beneficiaries')
         print(beneficiaries.status_code)
         print(beneficiaries.text)
-        os.system("pause")
         return []
 
 
@@ -323,7 +320,7 @@ def main():
     generate_token = generate_token if generate_token else 'y'
     if generate_token == 'y':
         token = generate_token_otp()
-        os.system("sed -i -s 's/existing_token = [\"*]/existing_token = \"{new_token}/g' {file}".format(
+        os.system("sed -i -s 's/existing_token = \".*/existing_token = \"{new_token}\"/g' {file}".format(
             new_token=token, file='./book_vaccination.py'
         ))
         os.system('rm ./book_vaccination.py-s')
@@ -344,7 +341,18 @@ def main():
         if beneficiary_ids and district_id:
             count = 0
             _start = datetime.now()
-            captcha = generate_captcha(headers)
+            try:
+                captcha = generate_captcha(headers)
+            except Exception:
+                try:
+                    opened = os.system('open ./captcha.png')
+                    assert opened == 0
+                    print("Captcha image is opened, if you can't find it. Check captcha.png in Book_Vaccine folder")
+                    captcha = input("Please enter text shown in captcha: ")
+                except Exception:
+                    os.system('open ./')
+                    print("There is some issue in your system, cannot open pop up to enter captcha")
+                    captcha = input("Check captcha.png in Book_Vaccine folder, and enter the text here: ")
             while keep_looking:
                 keep_looking = find_sessions(headers, district_id, vaccines, beneficiary_ids, centers, captcha)
                 count = count + 1
