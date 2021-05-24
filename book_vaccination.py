@@ -9,7 +9,6 @@ import os
 import sys
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM
-import PySimpleGUI
 import re
 from hashlib import sha256
 
@@ -84,6 +83,7 @@ def captcha_builder(resp):
     drawing = svg2rlg('captcha.svg')
     renderPM.drawToFile(drawing, "captcha.png", fmt="PNG")
 
+    import PySimpleGUI
     layout = [[PySimpleGUI.Image('captcha.png')],
               [PySimpleGUI.Text("Enter Captcha Below")],
               [PySimpleGUI.Input(key='inp')],
