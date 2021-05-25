@@ -19,8 +19,8 @@ CAPTCHA_URL = "https://cdn-api.co-vin.in/api/v2/auth/getRecaptcha"
 DISTRICT = 'district_id'
 DATE = 'date'
 
-BROWSER_HEADERS = [{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'},
-                   {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'}]
+BROWSER_HEADERS = [{'user-agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'},
+                   {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'}]
 
 
 @contextmanager
@@ -117,12 +117,20 @@ def get_url_with_query_params(district_id):
     return url
 
 
+def get_headers():
+    headers = BROWSER_HEADERS[1]
+    headers['origin'] = 'https://selfregistration.cowin.gov.in'
+    headers['referer'] = 'https://selfregistration.cowin.gov.in/'
+    headers['content-type'] = 'application/json'
+    return headers
+
+
 def generate_token_otp():
     """
     This function generate OTP and returns a new token
     """
     mobile = input("Enter the registered mobile number: ")
-    headers = BROWSER_HEADERS[0]
+    headers = get_headers()
 
     valid_token = False
     while not valid_token:
@@ -142,7 +150,6 @@ def generate_token_otp():
                 if OTP:
                     data = {"otp": sha256(str(OTP).encode('utf-8')).hexdigest(), "txnId": transaction_id}
                     print("Validating OTP..")
-
                     token = requests.post(url='https://cdn-api.co-vin.in/api/v2/auth/validateMobileOtp', json=data,
                                           headers=headers)
                     if token.status_code == 200:
@@ -312,7 +319,7 @@ def get_center_preference():
 
 
 def main():
-    headers = BROWSER_HEADERS[0]
+    headers = get_headers()
     vaccines = get_vaccine_preference()
     centers = get_center_preference()
 
