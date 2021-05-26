@@ -12,7 +12,8 @@ from reportlab.graphics import renderPM
 import re
 from hashlib import sha256
 
-API = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByDistrict"
+API_DISTRICT = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByDistrict"
+API_PINCODE = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByPin"
 API_BOOK = "https://cdn-api.co-vin.in/api/v2/appointment/schedule"
 CAPTCHA_URL = "https://cdn-api.co-vin.in/api/v2/auth/getRecaptcha"
 
@@ -43,8 +44,8 @@ def raise_timeout(signum, frame):
     raise TimeoutError
 
 
-def find_sessions(headers, district_id, vaccine_preference, beneficiary_ids, center_preference, captcha):
-    url = get_url_with_query_params(district_id)
+def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary_ids, center_preference, captcha):
+    url = get_url_with_query_params(district_id, pincode)
     response = None
     booked = False
     doses = len(beneficiary_ids)
@@ -109,15 +110,27 @@ def generate_captcha(request_header):
         return captcha_builder(resp.json())
 
 
-def get_url_with_query_params(district_id):
-    params = {DISTRICT: district_id, DATE: datetime.now().date().strftime("%d-%m-%Y")}
-    query_params_url = ''
-    for param in params:
-        query_params_url = query_params_url + param + '=' + params[param] + '&'
-    if query_params_url:
-        query_params_url = '?' + query_params_url[:-1]
-    url = API + query_params_url
-    return url
+def get_url_with_query_params(district_id, pincode):
+    if district_id:
+        params = {DISTRICT: district_id, DATE: datetime.now().date().strftime("%d-%m-%Y")}
+        query_params_url = ''
+        for param in params:
+            query_params_url = query_params_url + param + '=' + params[param] + '&'
+        if query_params_url:
+            query_params_url = '?' + query_params_url[:-1]
+        url = API_DISTRICT + query_params_url
+        return url
+    elif pincode:
+        params = {'pincode': pincode, DATE: datetime.now().date().strftime("%d-%m-%Y")}
+        query_params_url = ''
+        for param in params:
+            query_params_url = query_params_url + param + '=' + params[param] + '&'
+        if query_params_url:
+            query_params_url = '?' + query_params_url[:-1]
+        url = API_PINCODE + query_params_url
+        return url
+    print('Something went wrong')
+    sys.exit()
 
 
 def get_headers():
@@ -341,14 +354,27 @@ def main():
     if token:
         keep_looking = True
         headers['Authorization'] = 'Bearer ' + token
-        district_id = get_districts(headers)
-        district_id = str(district_id[0]['district_id']) if district_id else None
+        district_or_pin = input("Search centers by district name or pincode?, Enter 0 for district, 1 for pincode, Default 0: ")
+        district_or_pin = int(district_or_pin) if district_or_pin and int(district_or_pin) in [0, 1] else 0
+        pincode = None
+        district_id = None
+        if district_or_pin == 1:
+            pincode = input("Enter valid pincode: ")
+            if len(pincode) != 6:
+                print("Invalid pincode")
+                pincode = input("Enter valid pincode: ")
+            if len(pincode) != 6:
+                print("Invalid pincode")
+                pincode = None
+        else:
+            district_id = get_districts(headers)
+            district_id = str(district_id[0]['district_id']) if district_id else None
         beneficiaries = get_beneficiaries(headers)
         beneficiary_ids = []
         if beneficiaries:
             for beneficiary in beneficiaries:
                 beneficiary_ids.append(beneficiary['bref_id'])
-        if beneficiary_ids and district_id:
+        if beneficiary_ids and (district_id or pincode):
             count = 0
             _start = datetime.now()
             try:
@@ -364,7 +390,7 @@ def main():
                     print("There is some issue in your system, cannot open pop up to enter captcha")
                     captcha = input("Check captcha.png in Book_Vaccine folder, and enter the text here: ")
             while keep_looking:
-                keep_looking = find_sessions(headers, district_id, vaccines, beneficiary_ids, centers, captcha)
+                keep_looking = find_sessions(headers, district_id, pincode, vaccines, beneficiary_ids, centers, captcha)
                 count = count + 1
                 time.sleep(1)
                 if count > 90:
@@ -378,9 +404,9 @@ def main():
                 if (datetime.now() - token_generated_at).seconds > 600:
                     print("\n******Rerun your script as token might be expired as it is more than 10 min old*******\n")
         else:
-            print("Error: Invalid Beneficiary/District")
+            print("Error: Invalid Beneficiary/District/Pincode")
     else:
-        print("Please generate Token")
+        print("Please generate Token by otp")
 
 
 if __name__ == '__main__':
