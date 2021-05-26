@@ -10,12 +10,20 @@ Install python3
 
 Install virtualenv (pip/pip3 install virtualenv)
 
+ or
+
+python3 -m pip install --user virtualenv
+
 
 ## Virtual Env Activate ##
 
 inside this directory, run following commands:
 
 virtualenv venv -p python3
+
+or
+
+python3 -m venv env
 
 source venv/bin/activate
 

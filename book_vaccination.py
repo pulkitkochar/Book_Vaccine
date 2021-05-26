@@ -69,9 +69,12 @@ def find_sessions(headers, district_id, vaccine_preference, beneficiary_ids, cen
                                 'dose': 1}
                         data['captcha'] = captcha
                         book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
-                        booked = True if book_response.status_code in [200, 201] else False
                         print(book_response.status_code)
                         print(book_response.text)
+                        print('Thanks to Pulkit, your appointment is booked.')
+                        if book_response.status_code in [200, 201]:
+                            booked = True
+                            return not booked
         print('******No slot available in centers: ', len(centers)) if not found else None
     return not booked
 
