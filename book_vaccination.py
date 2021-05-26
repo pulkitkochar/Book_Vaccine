@@ -356,17 +356,26 @@ def main():
         headers['Authorization'] = 'Bearer ' + token
         district_or_pin = input("Search centers by district name or pincode?, Enter 0 for district, 1 for pincode, Default 0: ")
         district_or_pin = int(district_or_pin) if district_or_pin and int(district_or_pin) in [0, 1] else 0
-        pincode = None
+        pincodes = []
         district_id = None
         if district_or_pin == 1:
-            pincode = input("Enter valid pincode: ")
-            if len(pincode) != 6:
-                print("Invalid pincode")
+            number_of_pincodes = input("How many pincodes do you want to enter?: Default 1: ")
+            number_of_pincodes = int(number_of_pincodes) if number_of_pincodes and int(number_of_pincodes) > 0 else 1
+            for index in range(0, number_of_pincodes):
+                print('Pincode Number ', index + 1)
                 pincode = input("Enter valid pincode: ")
-            if len(pincode) != 6:
-                print("Invalid pincode")
-                pincode = None
-        else:
+                if len(pincode) != 6:
+                    print("Invalid pincode")
+                    print('Pincode Number ', index + 1)
+                    pincode = input("Enter valid pincode: ")
+                if len(pincode) != 6:
+                    print("Invalid pincode, ignoring this")
+                else:
+                    pincodes.append(pincode)
+                print("\n\n")
+            if not pincodes:
+                print("You are not entering valid pincodes, Please search by district")
+        if district_or_pin != 1 or not pincodes:
             district_id = get_districts(headers)
             district_id = str(district_id[0]['district_id']) if district_id else None
         beneficiaries = get_beneficiaries(headers)
@@ -374,7 +383,7 @@ def main():
         if beneficiaries:
             for beneficiary in beneficiaries:
                 beneficiary_ids.append(beneficiary['bref_id'])
-        if beneficiary_ids and (district_id or pincode):
+        if beneficiary_ids and (district_id or pincodes):
             count = 0
             _start = datetime.now()
             try:
@@ -390,9 +399,17 @@ def main():
                     print("There is some issue in your system, cannot open pop up to enter captcha")
                     captcha = input("Check captcha.png in Book_Vaccine folder, and enter the text here: ")
             while keep_looking:
-                keep_looking = find_sessions(headers, district_id, pincode, vaccines, beneficiary_ids, centers, captcha)
-                count = count + 1
-                time.sleep(1)
+                if pincodes:
+                    for pincode in pincodes:
+                        keep_looking = find_sessions(headers, district_id, pincode, vaccines, beneficiary_ids, centers, captcha)
+                        if not keep_looking:
+                            break
+                        count = count + 1
+                        time.sleep(1)
+                else:
+                    keep_looking = find_sessions(headers, district_id, None, vaccines, beneficiary_ids, centers, captcha)
+                    count = count + 1
+                    time.sleep(1)
                 if count > 90:
                     _now = datetime.now()
                     _should_wait_for_more = 300 - (_now - _start).seconds
