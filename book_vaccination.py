@@ -72,8 +72,8 @@ def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary
                         book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
                         print(book_response.status_code)
                         print(book_response.text)
-                        print('Thanks to Pulkit, your appointment is booked.')
                         if book_response.status_code in [200, 201]:
+                            print('Thanks to Pulkit, your appointment is booked.')
                             booked = True
                             return not booked
         print('******No slot available in centers: ', len(centers)) if not found else None
@@ -405,11 +405,11 @@ def main():
                         if not keep_looking:
                             break
                         count = count + 1
-                        time.sleep(1.5)
+                        time.sleep(2)
                 else:
                     keep_looking = find_sessions(headers, district_id, None, vaccines, beneficiary_ids, centers, captcha)
                     count = count + 1
-                    time.sleep(1.5)
+                    time.sleep(2)
                 if count > 20:
                     _now = datetime.now()
                     _should_wait_for_more = 60 - (_now - _start).seconds
