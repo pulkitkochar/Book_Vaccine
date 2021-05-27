@@ -405,14 +405,14 @@ def main():
                         if not keep_looking:
                             break
                         count = count + 1
-                        time.sleep(1)
+                        time.sleep(1.5)
                 else:
                     keep_looking = find_sessions(headers, district_id, None, vaccines, beneficiary_ids, centers, captcha)
                     count = count + 1
-                    time.sleep(1)
-                if count > 90:
+                    time.sleep(1.5)
+                if count > 20:
                     _now = datetime.now()
-                    _should_wait_for_more = 300 - (_now - _start).seconds
+                    _should_wait_for_more = 60 - (_now - _start).seconds
                     if _should_wait_for_more > 0:
                         print("To avoid blocking by server, Waiting for seconds: ", _should_wait_for_more)
                         time.sleep(_should_wait_for_more)
