@@ -12,8 +12,8 @@ from reportlab.graphics import renderPM
 import re
 from hashlib import sha256
 
-API_DISTRICT = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByDistrict"
-API_PINCODE = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByPin"
+API_DISTRICT = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict"
+API_PINCODE = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByPin"
 API_BOOK = "https://cdn-api.co-vin.in/api/v2/appointment/schedule"
 CAPTCHA_URL = "https://cdn-api.co-vin.in/api/v2/auth/getRecaptcha"
 
@@ -44,7 +44,7 @@ def raise_timeout(signum, frame):
     raise TimeoutError
 
 
-def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary_ids, center_preference, captcha):
+def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary_ids, center_preference, captcha, dose):
     url = get_url_with_query_params(district_id, pincode)
     response = None
     booked = False
@@ -60,14 +60,15 @@ def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary
         found = False
         for center in centers:
             for session in center['sessions']:
-                if session['min_age_limit'] == 18 and session['available_capacity'] >= doses and session['available_capacity_dose1'] >= doses:
-                    print('******', center['name'], session['date'], session['vaccine'], session['available_capacity'], session['available_capacity_dose1'])
+                preferred_dose = 'available_capacity_dose' + dose
+                if session['min_age_limit'] == 18 and session['available_capacity'] >= doses and session[preferred_dose] >= doses:
+                    print('******', center['name'], session['date'], session['vaccine'], session['available_capacity'], session[preferred_dose])
                     found = True
                     os.system('echo -e "\a"')
                     if (not vaccine_preference or session['vaccine'] == vaccine_preference) and (not center_preference or center_preference.lower() in center['name'].lower()):
                         data = {'center_id': center['center_id'], 'session_id': session['session_id'],
                                 'beneficiaries': beneficiary_ids, 'slot': session['slots'][-1], 'captcha': 'nMReQ',
-                                'dose': 1}
+                                'dose': int(dose)}
                         data['captcha'] = captcha
                         book_response = requests.post(API_BOOK, data=json.dumps(data), headers=headers)
                         print(book_response.status_code)
@@ -77,6 +78,9 @@ def find_sessions(headers, district_id, pincode, vaccine_preference, beneficiary
                             booked = True
                             return not booked
         print('******No slot available in centers: ', len(centers)) if not found else None
+    else:
+        print('******Error: ', response.status_code)
+        print('******Error: ', response.text)
     return not booked
 
 
@@ -337,6 +341,8 @@ def get_center_preference():
 def main():
     headers = get_headers()
     vaccines = get_vaccine_preference()
+    dose = input("\nEnter 1 for 1st dose, 2 for 2nd dose? (Default 1): ")
+    dose = '2' if dose == '2' else '1'
     centers = get_center_preference()
 
     generate_token = input("Generate New Token?, Press n if you ran the script in last 10 min (y/n Default y): ")
@@ -401,13 +407,13 @@ def main():
             while keep_looking:
                 if pincodes:
                     for pincode in pincodes:
-                        keep_looking = find_sessions(headers, district_id, pincode, vaccines, beneficiary_ids, centers, captcha)
+                        keep_looking = find_sessions(headers, district_id, pincode, vaccines, beneficiary_ids, centers, captcha, dose)
                         if not keep_looking:
                             break
                         count = count + 1
                         time.sleep(2)
                 else:
-                    keep_looking = find_sessions(headers, district_id, None, vaccines, beneficiary_ids, centers, captcha)
+                    keep_looking = find_sessions(headers, district_id, None, vaccines, beneficiary_ids, centers, captcha, dose)
                     count = count + 1
                     time.sleep(2)
                 if count > 20:
